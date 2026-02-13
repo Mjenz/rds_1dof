@@ -8,7 +8,7 @@
 /* Configuration of example sketch -------------------------------------------*/
 
 // CAN bus baudrate. Make sure this matches for every device on the bus
-#define CAN_BAUDRATE 250000
+#define CAN_BAUDRATE 25000
 
 // ODrive node_id for odrv0
 #define ODRV0_NODE_ID 0
@@ -38,7 +38,7 @@
 #ifdef IS_ARDUINO_BUILTIN
 // See https://github.com/arduino/ArduinoCore-API/blob/master/api/HardwareCAN.h
 // and https://github.com/arduino/ArduinoCore-renesas/tree/main/libraries/Arduino_CAN
-
+x
 #include <Arduino_CAN.h>
 #include <ODriveHardwareCAN.hpp>
 #endif // IS_ARDUINO_BUILTIN
@@ -260,8 +260,8 @@ void loop() {
   float phase = t * (TWO_PI / SINE_PERIOD);
 
   odrv0.setPosition(
-    sin(phase), // position
-    cos(phase) * (TWO_PI / SINE_PERIOD) // velocity feedforward (optional)
+    1.0 *sin(phase), // position
+    1.0 * cos(phase) * (TWO_PI / SINE_PERIOD) // velocity feedforward (optional)
   );
 
   // print position and velocity for Serial Plotter
