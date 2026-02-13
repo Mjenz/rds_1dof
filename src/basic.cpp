@@ -199,6 +199,10 @@ void setup() {
     Serial.println("CAN failed to initialize: reset required");
     while (true); // spin indefinitely
   }
+  else{
+    Serial.println("CAN initialized");
+
+  }
 
   Serial.println("Waiting for ODrive...");
   while (!odrv0_user_data.received_heartbeat) {
