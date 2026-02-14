@@ -24,8 +24,14 @@ ODriveCAN* odrives[] = {&odrv0}; // Make sure all ODriveCAN instances are accoun
 ODriveUserData odrv0_user_data; // Keep some application-specific user data for every ODrive.
 
 volatile float ref = 0;
+volatile float ref_vel = 0;
 
 // void onCanMessage(const CanMsg& msg);  // forward declaration of function used
+float limit(float x, float limit){
+  if(x > limit) {x = limit;}
+  if(x < -limit) {x = -limit;}
+  return x;
+}
 
 bool setupCan() {
   can_intf.begin();
@@ -54,23 +60,18 @@ void onFeedback(Get_Encoder_Estimates_msg_t& msg, void* user_data) {
 
 void runControl(){
   Get_Encoder_Estimates_msg_t feedback = odrv0_user_data.last_feedback;
-  static long prev_time = 0;
-  static float e_prev = 0;
   static float kp = 1.0f;
   static float kd = 1.0f;
   static float ff_gain = 1.0f;
   static float angle_tare = 0.0f;
 
-  long curr_time = millis();
-  float dt = (curr_time-prev_time)/1000.0;
-
   float e = ref - feedback.Pos_Estimate;
+  float e_vel = ref_vel - feedback.Vel_Estimate;
   float ff = sinf(e-angle_tare);
 
-  float u = kp*e + kd*(e-e_prev)/dt + ff_gain*ff;
-
-  prev_time = curr_time;
-  e_prev = e;
+  float x = kp*e + kd*e_vel+ ff_gain*ff;
+  float u = limit(x, 0.5);
+  odrv0.setTorque(u);
 }
 
 // Called for every message that arrives on the CAN bus
@@ -147,6 +148,7 @@ void loop() {
   float t = 0.001 * millis();
   float phase = t * (TWO_PI / SINE_PERIOD);
   ref = sin(phase);
+  ref_vel = (TWO_PI / SINE_PERIOD) * cos(sin(phase));
 
   // print position and velocity for Serial Plotter
   if (odrv0_user_data.received_feedback) {
