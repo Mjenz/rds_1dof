@@ -1,6 +1,5 @@
-/*  */#include <Arduino.h>
 #include "ODriveCAN.h"
-
+#include "pos_controller.hpp"
 // Documentation for this example can be found here:
 // https://docs.odriverobotics.com/v/latest/guides/arduino-can-guide.html
 
@@ -69,6 +68,7 @@ struct ODriveStatus; // hack to prevent teensy compile error
 
 FlexCAN_T4<CAN1, RX_SIZE_256, TX_SIZE_16> can_intf;
 
+auto controller = PositionController(1.0);
 
 void onCanMessage(const CanMsg& msg);
 
@@ -244,6 +244,7 @@ void setup() {
 }
 
 void loop() {
+
   pumpEvents(can_intf); // This is required on some platforms to handle incoming feedback CAN messages
                         // Note that on MCP2515-based platforms, this will delay for a fixed 10ms.
                         //
@@ -256,19 +257,18 @@ void loop() {
   
   float phase = t * (TWO_PI / SINE_PERIOD);
 
-  odrv0.setPosition(
-    sin(phase), // position
-    cos(phase) * (TWO_PI / SINE_PERIOD) // velocity feedforward (optional)
-  );
+  auto u = controller.pump_controller(0.5 * sin(phase), odrv0_user_data.last_feedback.Pos_Estimate, odrv0_user_data.last_feedback.Vel_Estimate);
+
+  odrv0.setTorque(u);
 
   // print position and velocity for Serial Plotter
   if (odrv0_user_data.received_feedback) {
     Get_Encoder_Estimates_msg_t feedback = odrv0_user_data.last_feedback;
     odrv0_user_data.received_feedback = false;
-    Serial.print("odrv0-pos:");
+    Serial.print(">>odrv0-pos:");
     Serial.print(feedback.Pos_Estimate);
-    Serial.print(",");
-    Serial.print("odrv0-vel:");
-    Serial.println(feedback.Vel_Estimate);
+    Serial.print("\n");
+    Serial.print(">>cmd_pos");
+    Serial.println(sin(phase));
   }
 }
