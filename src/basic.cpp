@@ -8,7 +8,7 @@
 /* Configuration of example sketch -------------------------------------------*/
 
 // CAN bus baudrate. Make sure this matches for every device on the bus
-#define CAN_BAUDRATE 25000
+#define CAN_BAUDRATE 250000
 
 // ODrive node_id for odrv0
 #define ODRV0_NODE_ID 0
@@ -38,7 +38,7 @@
 #ifdef IS_ARDUINO_BUILTIN
 // See https://github.com/arduino/ArduinoCore-API/blob/master/api/HardwareCAN.h
 // and https://github.com/arduino/ArduinoCore-renesas/tree/main/libraries/Arduino_CAN
-x
+
 #include <Arduino_CAN.h>
 #include <ODriveHardwareCAN.hpp>
 #endif // IS_ARDUINO_BUILTIN
@@ -69,7 +69,8 @@ struct ODriveStatus; // hack to prevent teensy compile error
 
 FlexCAN_T4<CAN1, RX_SIZE_256, TX_SIZE_16> can_intf;
 
-void onCanMessage(const CanMsg& msg);  // forward declaration of function used
+
+void onCanMessage(const CanMsg& msg);
 
 bool setupCan() {
   can_intf.begin();
@@ -199,10 +200,6 @@ void setup() {
     Serial.println("CAN failed to initialize: reset required");
     while (true); // spin indefinitely
   }
-  else{
-    Serial.println("CAN initialized");
-
-  }
 
   Serial.println("Waiting for ODrive...");
   while (!odrv0_user_data.received_heartbeat) {
@@ -260,8 +257,8 @@ void loop() {
   float phase = t * (TWO_PI / SINE_PERIOD);
 
   odrv0.setPosition(
-    1.0 *sin(phase), // position
-    1.0 * cos(phase) * (TWO_PI / SINE_PERIOD) // velocity feedforward (optional)
+    sin(phase), // position
+    cos(phase) * (TWO_PI / SINE_PERIOD) // velocity feedforward (optional)
   );
 
   // print position and velocity for Serial Plotter
