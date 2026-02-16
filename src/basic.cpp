@@ -5,6 +5,7 @@
 #include <FlexCAN_T4.h>
 #include "ODriveFlexCAN.hpp"
 #include <TeensyTimerTool.h>
+#include <numbers>
 
 #define CAN_BAUDRATE 250000
 #define ODRV0_NODE_ID 0
@@ -21,7 +22,7 @@ struct ODriveUserData
 
 FlexCAN_T4<CAN1, RX_SIZE_256, TX_SIZE_16> can_intf;
 
-auto controller = PositionController(.2);
+auto controller = PositionController(.18, 0.005, 0.008);
 
 void onCanMessage(const CanMsg & msg);
 
@@ -35,7 +36,13 @@ TeensyTimerTool::PeriodicTimer print_timer(TeensyTimerTool::TCK);
 auto control_count = 0;
 auto setpoint = 0.0;
 auto actual = 0.0;
-
+auto next = 0.0;
+auto u = 0.0;
+auto u_clamp = 0.15;
+auto u_clamping = true;
+auto encoder_offset = 0.0;
+auto target = 3.14 / 2.0;
+auto amplitude = 3.0;
 // Called every time a Heartbeat message arrives from the ODrive
 void onHeartbeat(Heartbeat_msg_t & msg, void * user_data)
 {
@@ -71,7 +78,7 @@ bool setupCan()
   return true;
 }
 
-void control_loop()
+void sin_control_loop()
 {
 
   pumpEvents(can_intf); // This is required on some platforms to handle incoming feedback CAN messages
@@ -86,13 +93,60 @@ void control_loop()
 
   float phase = t * (TWO_PI / SINE_PERIOD);
 
-  setpoint = 10.0 * sin(phase);
-  actual = odrv0_user_data.last_feedback.Pos_Estimate;
+  setpoint = amplitude * sin(phase);
+  actual = odrv0_user_data.last_feedback.Pos_Estimate - encoder_offset;
+  next = amplitude * sin(phase + 0.001);
+  u = controller.pump_controller(setpoint, actual, next, odrv0_user_data.last_feedback.Vel_Estimate);
 
-  auto u = controller.pump_controller(setpoint, actual,
-    odrv0_user_data.last_feedback.Vel_Estimate);
+  // clamp err_int
+  if (u > u_clamp && u_clamping)
+  {
+      u = u_clamp;
+  } 
+  else if (u < -u_clamp && u_clamping)
+  {
+      u = -u_clamp;
+  }
 
   odrv0.setTorque(u);
+  
+}
+
+void step_control_loop()
+{
+  static double control = 1.0;
+
+  pumpEvents(can_intf); // This is required on some platforms to handle incoming feedback CAN messages
+                        // Note that on MCP2515-based platforms, this will delay for a fixed 10ms.
+                        //
+                        // This has been found to reduce the number of dropped messages, however it can be removed
+                        // for applications requiring loop times over 100Hz.
+
+  if (control_count > 10000)
+  {
+    control_count = 0;
+    amplitude*=-1;
+    control = target + amplitude;
+  }
+
+  setpoint = control;
+  actual = odrv0_user_data.last_feedback.Pos_Estimate - encoder_offset;
+  if (control_count+1 > 10000) {next=control*-1;} else {next=control;}
+  u = controller.pump_controller(setpoint, actual, next, odrv0_user_data.last_feedback.Vel_Estimate);
+
+  // clamp err_int
+  if (u > u_clamp && u_clamping)
+  {
+      u = u_clamp;
+  } 
+  else if (u < -u_clamp && u_clamping)
+  {
+      u = -u_clamp;
+  }
+
+  odrv0.setTorque(u);
+
+  control_count++;
   
 }
 
@@ -100,29 +154,40 @@ void print_loop()
 {
   if (odrv0_user_data.received_feedback == true)
   {
-    Get_Encoder_Estimates_msg_t feedback = odrv0_user_data.last_feedback;
     odrv0_user_data.received_feedback = false;
     Serial.print(">odrv0_pos:");
     Serial.print(actual);
     Serial.print("\n");
     Serial.print(">cmd_pos:");
     Serial.println(setpoint);
+    Serial.print("\n");
+    Serial.print(">u:");
+    Serial.println(u);
+    Serial.print("\n");
+    Serial.print(">encoder_offset:");
+    Serial.println(encoder_offset);
   }
 }
 
 
 void setup()
 {
+
   Serial.begin(115200);
 
   // disable feed forward
   controller.set_ffwd_control(false);
+  controller.set_gvty_compensation(false);
+  controller.set_clamp_val(0.5);
 
   Serial.println("Starting ODriveCAN demo");
 
   // Register callbacks for the heartbeat and encoder feedback messages
   odrv0.onFeedback(onFeedback, &odrv0_user_data);
   odrv0.onStatus(onHeartbeat, &odrv0_user_data);
+
+  // set encoder offset
+  encoder_offset = odrv0_user_data.last_feedback.Pos_Estimate;
 
   // Configure and initialize the CAN bus interface. This function depends on
   // your hardware and the CAN stack that you're using.
@@ -175,13 +240,13 @@ void setup()
 
   timer.begin(
     [](){
-      control_loop();
+      sin_control_loop();
     }, 1000);
 
   print_timer.begin(
     [](){
       print_loop();
-    }, 10000);
+    }, 1000);
 
   Serial.println("ODrive ready!");
 
