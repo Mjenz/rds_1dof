@@ -58,8 +58,6 @@
 // #endif // IS_TEENSY_BUILTIN
 
 
-
-
 // /* Board-specific settings ---------------------------------------------------*/
 
 
@@ -97,7 +95,7 @@
 // // NOTE: not all Arduino pins are interruptable, check the documentation for your board!
 // #define MCP2515_INT 2
 
-// // freqeuncy of the crystal oscillator on the MCP2515 breakout board. 
+// // freqeuncy of the crystal oscillator on the MCP2515 breakout board.
 // // common values are: 16 MHz, 12 MHz, 8 MHz
 // #define MCP2515_CLK_HZ 8000000
 
@@ -252,7 +250,7 @@
 //   float SINE_PERIOD = 2.0f; // Period of the position command sine wave in seconds
 
 //   float t = 0.001 * millis();
-  
+
 //   float phase = t * (TWO_PI / SINE_PERIOD);
 
 //   odrv0.setPosition(
