@@ -4,14 +4,16 @@ PositionController::PositionController(double Kp)
 : Kp_(Kp),
   Ki_(0.0),
   Kd_(0.0),
-  Kff_(0.001),
+  Kff_(0.0),
+  Kgvty_(0.025),
   Icntrl_ (false),
   Dcntrl_ (false),
   err_ (0.0),
   err_int_ (0.0),
   err_der_ (0.0),
   err_prev_ (0.0),
-  clamp_val_ (5.0),
+  i_clamp_val_ (5.0),
+  u_clamp_val_ (5.0),
   feed_fwd_enable_ (true),
   ffwd_term_ (0.0),
   gvty_fwd_enable_ (true),
@@ -24,14 +26,16 @@ PositionController::PositionController(double Kp, double Ki)
 : Kp_(Kp),
   Ki_(Ki),
   Kd_(0.0),
-  Kff_(0.001),
+  Kff_(0.0),
+  Kgvty_(0.025),
   Icntrl_ (true),
   Dcntrl_ (false),
   err_ (0.0),
   err_int_ (0.0),
   err_der_ (0.0),
   err_prev_ (0.0),
-  clamp_val_ (5.0),
+  i_clamp_val_ (5.0),
+  u_clamp_val_ (5.0),
   feed_fwd_enable_ (true),
   ffwd_term_ (0.0),
   gvty_fwd_enable_ (true),
@@ -44,14 +48,16 @@ PositionController::PositionController(double Kp, double Ki, double Kd)
 : Kp_(Kp),
   Ki_(Ki),
   Kd_(Kd),
-  Kff_(0.001),
+  Kff_(.025),
+  Kgvty_(0.025),
   Icntrl_ (true),
   Dcntrl_ (true),
   err_ (0.0),
   err_int_ (0.0),
   err_der_ (0.0),
   err_prev_ (0.0),
-  clamp_val_ (5.0),
+  i_clamp_val_ (5.0),
+  u_clamp_val_ (5.0),
   feed_fwd_enable_ (true),
   ffwd_term_ (0.0),
   gvty_fwd_enable_ (true),
@@ -70,16 +76,21 @@ void PositionController::set_gvty_compensation(bool enable)
     gvty_fwd_enable_ = enable;
 }
 
-void PositionController::set_clamp_val(double clamp_val)
+void PositionController::set_i_clamp_val(double clamp_val)
 {
-    clamp_val_ = clamp_val;
+    i_clamp_val_ = clamp_val;
+}
+
+void PositionController::set_u_clamp_val(double clamp_val)
+{
+    u_clamp_val_ = clamp_val;
 }
 
 double PositionController::pump_controller(double setpoint, double actual, double next_cmd, float shaft_vel)
 {
 
     err_ = setpoint - actual;
-    if (gvty_fwd_enable_) {gvty_term_ = sin(actual / GEAR_RATIO);}
+    if (gvty_fwd_enable_) {gvty_term_ = -cos(actual * 2 * PI / GEAR_RATIO);}
     if (feed_fwd_enable_) {ffwd_term_ = next_cmd;}
     if (Icntrl_) {err_int_ += err_;}
 
@@ -87,14 +98,29 @@ double PositionController::pump_controller(double setpoint, double actual, doubl
     err_prev_ = err_;
 
     // clamp err_int
-    if (err_int_ > clamp_val_ && Icntrl_)
+    if (err_int_ > i_clamp_val_ && Icntrl_)
     {
-        err_int_ = clamp_val_;
+        err_int_ = i_clamp_val_;
+        Serial.println("clamping high");
     } 
-    else if (err_int_ < -clamp_val_ && Icntrl_)
+    else if (err_int_ < -i_clamp_val_ && Icntrl_)
     {
-        err_int_ = -clamp_val_;
+        err_int_ = -i_clamp_val_;
+        Serial.println("clamping low");
+
     }
 
-    return gvty_term_ + ffwd_term_ + Kp_ * err_ + Ki_ * err_int_ + Kd_ * err_der_;
+    auto u = Kp_ * err_ + Ki_ * err_int_ + Kd_ * err_der_;
+
+    // clamp command
+    if (u > u_clamp_val_)
+    {
+        u = u_clamp_val_;
+    } 
+    else if (u < -u_clamp_val_)
+    {
+        u = -u_clamp_val_;
+    }
+
+    return u +  Kff_* gvty_term_ + Kff_ * ffwd_term_;
 }

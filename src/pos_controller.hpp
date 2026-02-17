@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 
-#define GEAR_RATIO 36.0 // : 1
+#define GEAR_RATIO 18.0 // : 1
 
 /// \brief Abstracted position controller for motor control
 class PositionController
@@ -41,7 +41,11 @@ public:
 
   /// \brief Set the value of the integral control error clamp
   /// \param clamp_val - The value that the integral error is clamped at
-  void set_clamp_val(double clamp_val);
+  void set_i_clamp_val(double clamp_val);
+
+  /// \brief Set the value of the command clamp
+  /// \param clamp_val - The value that the command output is clamped at
+  void set_u_clamp_val(double clamp_val);
 
 private:
   /// \brief Proportional gain
@@ -52,6 +56,8 @@ private:
   double Kd_;
   /// \brief Feed forward gain
   double Kff_;
+  /// \brief Gravity compensation forward gain
+  double Kgvty_;
   /// \brief Boolean enabling integral control
   bool Icntrl_;
   /// \brief Boolean enabling derivative control
@@ -65,7 +71,9 @@ private:
   /// \brief Previous error
   double err_prev_;
   /// \brief Integral error clamping value
-  double clamp_val_;
+  double i_clamp_val_;
+  /// \brief Command clamping value
+  double u_clamp_val_;
   /// \brief Boolean enabling feed forward control
   bool feed_fwd_enable_;
   /// \brief Feed forward compensation term

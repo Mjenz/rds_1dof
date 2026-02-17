@@ -22,7 +22,8 @@ struct ODriveUserData
 
 FlexCAN_T4<CAN1, RX_SIZE_256, TX_SIZE_16> can_intf;
 
-auto controller = PositionController(.18, 0.005, 0.008);
+// auto controller = PositionController(.2, 0.006, 0.008);
+auto controller = PositionController(.0, 0.0, 0.0);
 
 void onCanMessage(const CanMsg & msg);
 
@@ -37,12 +38,13 @@ auto control_count = 0;
 auto setpoint = 0.0;
 auto actual = 0.0;
 auto next = 0.0;
+auto velocity = 0.0;
 auto u = 0.0;
 auto u_clamp = 0.15;
 auto u_clamping = true;
 auto encoder_offset = 0.0;
-auto target = 3.14 / 2.0;
-auto amplitude = 3.0;
+auto target = 0.0;
+auto amplitude = 1.0;
 // Called every time a Heartbeat message arrives from the ODrive
 void onHeartbeat(Heartbeat_msg_t & msg, void * user_data)
 {
@@ -87,7 +89,7 @@ void sin_control_loop()
                         // This has been found to reduce the number of dropped messages, however it can be removed
                         // for applications requiring loop times over 100Hz.
 
-  float SINE_PERIOD = 5.0f; // Period of the position command sine wave in seconds
+  float SINE_PERIOD = 2.50f; // Period of the position command sine wave in seconds
 
   float t = 0.001 * millis();
 
@@ -96,17 +98,9 @@ void sin_control_loop()
   setpoint = amplitude * sin(phase);
   actual = odrv0_user_data.last_feedback.Pos_Estimate - encoder_offset;
   next = amplitude * sin(phase + 0.001);
-  u = controller.pump_controller(setpoint, actual, next, odrv0_user_data.last_feedback.Vel_Estimate);
+  velocity = odrv0_user_data.last_feedback.Vel_Estimate;
 
-  // clamp err_int
-  if (u > u_clamp && u_clamping)
-  {
-      u = u_clamp;
-  } 
-  else if (u < -u_clamp && u_clamping)
-  {
-      u = -u_clamp;
-  }
+  u = controller.pump_controller(setpoint, actual, next, odrv0_user_data.last_feedback.Vel_Estimate);
 
   odrv0.setTorque(u);
   
@@ -122,7 +116,7 @@ void step_control_loop()
                         // This has been found to reduce the number of dropped messages, however it can be removed
                         // for applications requiring loop times over 100Hz.
 
-  if (control_count > 10000)
+  if (control_count > 5000)
   {
     control_count = 0;
     amplitude*=-1;
@@ -131,18 +125,9 @@ void step_control_loop()
 
   setpoint = control;
   actual = odrv0_user_data.last_feedback.Pos_Estimate - encoder_offset;
-  if (control_count+1 > 10000) {next=control*-1;} else {next=control;}
-  u = controller.pump_controller(setpoint, actual, next, odrv0_user_data.last_feedback.Vel_Estimate);
-
-  // clamp err_int
-  if (u > u_clamp && u_clamping)
-  {
-      u = u_clamp;
-  } 
-  else if (u < -u_clamp && u_clamping)
-  {
-      u = -u_clamp;
-  }
+  velocity = odrv0_user_data.last_feedback.Vel_Estimate;
+  // if (control_count+1 > 5000) {next=control*-1;} else {next=control;}
+  u = controller.pump_controller(setpoint, actual, next, velocity);
 
   odrv0.setTorque(u);
 
@@ -164,8 +149,17 @@ void print_loop()
     Serial.print(">u:");
     Serial.println(u);
     Serial.print("\n");
-    Serial.print(">encoder_offset:");
-    Serial.println(encoder_offset);
+    Serial.print(">velocity:");
+    Serial.println(velocity);
+    Serial.print("\n");
+    // Serial.print(">cos(angle):");
+    // Serial.println(cos(2*PI*(actual) / 18.0));
+    // Serial.print("\n");
+    // Serial.print(">actual:");
+    // Serial.println(actual);
+    // Serial.print("\n");
+    // Serial.print(">actual/gr:");
+    // Serial.println(actual/18.0);
   }
 }
 
@@ -178,16 +172,14 @@ void setup()
   // disable feed forward
   controller.set_ffwd_control(false);
   controller.set_gvty_compensation(false);
-  controller.set_clamp_val(0.5);
+  controller.set_i_clamp_val(10.0);
+  controller.set_u_clamp_val(0.2);
 
   Serial.println("Starting ODriveCAN demo");
 
   // Register callbacks for the heartbeat and encoder feedback messages
   odrv0.onFeedback(onFeedback, &odrv0_user_data);
   odrv0.onStatus(onHeartbeat, &odrv0_user_data);
-
-  // set encoder offset
-  encoder_offset = odrv0_user_data.last_feedback.Pos_Estimate;
 
   // Configure and initialize the CAN bus interface. This function depends on
   // your hardware and the CAN stack that you're using.
@@ -218,6 +210,9 @@ void setup()
 
   Serial.println("Enabling closed loop control...");
 
+  // set encoder offset
+  encoder_offset = odrv0_user_data.last_feedback.Pos_Estimate;
+
   while (odrv0_user_data.last_heartbeat.Axis_State !=
     ODriveAxisState::AXIS_STATE_CLOSED_LOOP_CONTROL)
   {
@@ -240,7 +235,7 @@ void setup()
 
   timer.begin(
     [](){
-      sin_control_loop();
+      step_control_loop();
     }, 1000);
 
   print_timer.begin(
